@@ -501,6 +501,7 @@ class AntiRansomwareApp(ttkb.Window):
 class WelcomePage(ttk.Frame):
     SPLASH_DURATION = 2300  # 2.3 seconds
 
+# Added comments
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
