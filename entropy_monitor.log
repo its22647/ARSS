@@ -1,0 +1,9 @@
+2025-08-24 19:11:05 [INFO] [+] Checked C:\Users\Dell\Desktop\test_folder\random_data.bin - Entropy: 7.99
+2025-08-24 19:11:15 [WARNING] [\u26a0] Suspected process python.exe (PID: 3816) using file...
+2025-08-24 19:11:15 [INFO] [\u23f8] Process python.exe (PID: 3816) suspended.
+2025-08-24 19:11:56 [INFO] [\U0001f480] Process tree 3816 terminated!
+2025-08-24 19:11:57 [INFO] [\U0001f5d1] File deleted: C:\Users\Dell\Desktop\test_folder\random_data.bin
+2025-08-24 19:46:30 [INFO] [\u2713] State loaded from entropy_monitor_state.json
+2025-08-24 19:46:30 [INFO] \U0001f7e2 Monitoring started on: C:\
+2025-08-24 19:46:30 [INFO] \U0001f7e2 Monitoring started on: D:\
+2025-08-24 19:46:30 [INFO] \U0001f680 Full system monitoring active.

@@ -1,0 +1,8 @@
+2025-03-16 15:21:14,405 - INFO - Starting scan for: C:/Users/Dell/eicar.com
+2025-03-16 15:22:03,269 - INFO - \u2705 No threats found in: C:/Users/Dell/eicar.com
+2025-03-16 15:31:15,814 - INFO - \U0001f50d Scanning: C:\Users\Dell\Desktop\test_folder\eicar.com
+2025-03-16 15:31:58,917 - WARNING - \u26a0 Threat detected: C:\Users\Dell\Desktop\test_folder\eicar.com
+2025-03-16 15:31:58,918 - INFO - \u2705 Infected file deleted.
+2025-03-16 16:48:51,141 - INFO - \U0001f50d Scanning: C:\Users\Dell\Desktop\test_folder\eicar.com
+2025-03-16 16:49:35,522 - WARNING - \u26a0 Threat detected: C:\Users\Dell\Desktop\test_folder\eicar.com
+2025-03-16 16:49:35,525 - INFO - \u2705 Infected file deleted.
