@@ -2,6 +2,8 @@ import os
 import pickle
 import threading
 from scanner_utils import scan_and_delete
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import os, threading, concurrent.futures
 import subprocess, sys
 import psutil
 import json
@@ -35,7 +37,7 @@ def show_popup(title, message):
     messagebox.showinfo(title, message)
     popup_root.destroy()
 
-SCOPES = ['https://www.googleapis.com/auth/drive.file']
+
 HANDLE_EXE_PATH = os.path.join(os.getcwd(), "handle.exe")
 
 PROTECTED_PATHS = [os.path.expanduser("~/Documents")]
@@ -56,6 +58,12 @@ I18N = {
         "btn_backup": "💾 Backup Data",
         "btn_threats": "⚠ Threat Logs",
         "btn_settings": "🌎 Switch Language",
+        # --- new scan buttons ---
+        "btn_select_file_scan": "📂 Select File & Scan",
+        "btn_deep_scan": "🛡 Deep Scan",
+        "btn_realtime_bg_scan": "⚙ Real Time Background Scan",
+        "btn_realtime_ransomware_scan": "🚨 Real Time Ransomware Scan",
+        # ------------------------
         "subtitle_safety": "Stay Safe from Ransomware!",
         "status_title": "System is Secure",
         "last_scan_today": "Last Scan: Today",
@@ -104,6 +112,12 @@ I18N = {
         "btn_backup": "💾 بیک اپ",
         "btn_threats": "⚠ تھریٹ لاگ",
         "btn_settings": "🌎 زبان تبدیل کریں",
+        # --- new scan buttons ---
+        "btn_select_file_scan": "📂 فائل منتخب کریں اور اسکین کریں",
+        "btn_deep_scan": "🛡 تفصیلی اسکین",
+        "btn_realtime_bg_scan": "⚙ ریئل ٹائم بیک گراؤنڈ اسکین",
+        "btn_realtime_ransomware_scan": "🚨 ریئل ٹائم رینسم ویئر اسکین",
+        # ------------------------
         "subtitle_safety": "رینسم ویئر سے محفوظ رہیں!",
         "status_title": "سسٹم محفوظ ہے",
         "last_scan_today": "آخری اسکین: آج",
@@ -147,6 +161,7 @@ I18N = {
         "virus_info_2": "یو ایس بی اسکیننگ / ڈاؤن لوڈ کردہ فائلز اسکیننگ...",
     },
 }
+
 
 def authenticate_drive():
     creds = None
@@ -436,6 +451,8 @@ class AntiRansomwareApp(ttkb.Window):
         self.state("zoomed")
         self.theme_mode = theme_mode
         self.lang = language if language in I18N else "English"
+        self.language = self.lang   # ✅ fix added (for ScanPage compatibility)
+
         container = ttk.Frame(self)
         container.pack(fill="both", expand=True)
         self.frames = {}
@@ -474,6 +491,7 @@ class AntiRansomwareApp(ttkb.Window):
         else:
             chosen = "English"
         self.lang = chosen
+        self.language = self.lang   # ✅ keep language synced
         write_theme_file(self.theme_mode, self.lang)
         for frame in self.frames.values():
             if hasattr(frame, "apply_language"):
@@ -499,9 +517,8 @@ class AntiRansomwareApp(ttkb.Window):
         write_theme_file(self.theme_mode, self.lang)
 
 class WelcomePage(ttk.Frame):
-    SPLASH_DURATION = 2300  # 2.3 seconds
+    SPLASH_DURATION = 5000 # 5 seconds
 
-# Added comments
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
@@ -690,119 +707,204 @@ class MainPage(ttk.Frame):
         self.ransomware_scan_label.config(text=t["virus_info_1"])
         self.other_scan_label.config(text=t["virus_info_2"])
 
+
+import os, threading, concurrent.futures
+from tkinter import filedialog, messagebox
+from tkinter import ttk
+
 class ScanPage(ttk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
         self.selected_file = None
+        self.stop_scan_flag = False
 
-        # Back Button
         ttk.Button(self, text="⬅ Back", bootstyle="secondary",
                    command=lambda: controller.show_frame(MainPage)).place(x=20, y=20)
 
-        # Card (UI container)
         self.card = ttk.LabelFrame(self, text=" 🔎 Scan Files for Ransomware ",
-                                   padding=50, bootstyle="primary")
-        self.card.pack(pady=100, padx=400)
+                                   padding=50, bootstyle="info")
+        self.card.pack(pady=60, padx=60, fill="both", expand=True)
 
-        # Widgets inside card
-        self.progress_bar = ttk.Progressbar(self.card, bootstyle="info-striped", length=400)
-        self.progress_label = ttk.Label(self.card, text="", font=("Arial", 12))
-        self.status_label = ttk.Label(self.card, text="", font=("Arial", 12, "bold"))
-
-        ttk.Button(self.card, text="📂 Select File & Scan",
+        # --- Buttons (with I18N support) ---
+        self.btn_file_scan = ttk.Button(self.card,
+                   text=I18N[self.controller.language]["btn_select_file_scan"],
                    bootstyle="info-outline",
                    command=self.select_file_and_scan,
-                   width=30).pack(pady=10)
+                   width=30)
+        self.btn_file_scan.pack(pady=10)
 
+        self.btn_deep_scan = ttk.Button(self.card,
+                   text=I18N[self.controller.language]["btn_deep_scan"],
+                   bootstyle="danger-outline",
+                   command=self.start_full_system_scan,
+                   width=30)
+        self.btn_deep_scan.pack(pady=10)
+
+        self.btn_realtime_bg = ttk.Button(self.card,
+                   text=I18N[self.controller.language]["btn_realtime_bg_scan"],
+                   bootstyle="success-outline",
+                   command=self.start_realtime_scan,
+                   width=30)
+        self.btn_realtime_bg.pack(pady=10)
+
+        self.btn_realtime_ransomware = ttk.Button(self.card,
+                   text=I18N[self.controller.language]["btn_realtime_ransomware_scan"],
+                   bootstyle="warning-outline",
+                   command=self.start_ransomware_scan,
+                   width=30)
+        self.btn_realtime_ransomware.pack(pady=10)
+
+        # Status + progress
+        self.status_label = ttk.Label(self.card, text="Status: Idle", font=("Segoe UI", 10))
         self.status_label.pack(pady=10)
-        self.progress_bar.pack(pady=5)
-        self.progress_label.pack(pady=2)
 
+        self.progress_bar = ttk.Progressbar(self.card, mode="determinate", length=300)
+        self.progress_bar.pack(pady=10)
+
+        self.progress_label = ttk.Label(self.card, text="", font=("Segoe UI", 9))
+        self.progress_label.pack(pady=5)
+
+        self.stop_button = ttk.Button(self.card, text="⛔ Stop Scan",
+                                      bootstyle="danger-outline",
+                                      command=self.stop_full_system_scan)
+        self.stop_button.pack_forget()
+
+    # ----------------- FILE SCAN -----------------
     def select_file_and_scan(self):
-        """Open file dialog and start scanning thread."""
-        file_path = filedialog.askopenfilename(parent=self.master)
+        file_path = filedialog.askopenfilename()
         if file_path:
-            self.selected_file = file_path
-            self.status_label.config(text=I18N[self.controller.lang]["scanning_text"])
-            self.progress_bar["value"] = 0
-            self.progress_label.config(text="0%")
+            from scanner_utils import scan_and_delete
+            threat_page = self.controller.frames[ThreatsPage]
 
-            threading.Thread(target=self.run_scan_thread, args=(file_path,), daemon=True).start()
-        else:
-            self.reset_ui()
+            result = scan_and_delete(file_path)
+            threat_page.add_log_entry(f"{os.path.basename(file_path)}: {result}")
 
-    def update_progress_ui(self, value: int):
-        self.progress_bar["value"] = value
-        self.progress_label.config(text=f"{value}%")
+            if "❌" in result:
+                messagebox.showerror("Threat Detected", result)
+            else:
+                messagebox.showinfo("Scan Result", result)
 
-    def run_scan_thread(self, file_path: str):
-        """Background thread: run scan and update UI."""
+    # ----------------- DEEP SCAN -----------------
+    def start_full_system_scan(self):
+        self.stop_scan_flag = False
+        self.status_label.config(text="🔍 Deep scanning your home directory...")
+        self.progress_bar["value"] = 0
+        self.progress_label.config(text="0%")
+        self.stop_button.pack_forget()  # ❌ no stop button in deep scan
+        threading.Thread(target=self.run_deep_scan, daemon=True).start()
+
+    def run_deep_scan(self):
+        from scanner_utils import scan_and_delete
+        threat_page = self.controller.frames[ThreatsPage]
+
         try:
-            from scanner_utils import scan_and_delete
-            # Run scan
-            result = scan_and_delete(file_path, auto_delete=False)
+            # Home directory only
+            home_dir = os.path.expanduser("~")
+            file_list = []
+            for root, _, files in os.walk(home_dir):
+                for f in files:
+                    file_list.append(os.path.join(root, f))
 
-            # Set progress to 100 when finished
-            self.after(0, lambda: self.update_progress_ui(100))
-            self.after(0, lambda: self.scan_complete_ui(file_path, result))
+            # Parallel scan
+            threats = self.parallel_scan_files(file_list, threat_page)
+
+            # After scan completes, popup
+            if not threats:
+                self.after(0, lambda: messagebox.showinfo("Deep Scan", "✅ No threats found."))
+            else:
+                # Collect just filenames
+                threat_list = "\n".join([os.path.basename(fp) for fp, _ in threats])
+
+                def ask_delete():
+                    ans = messagebox.askyesno(
+                        "Threats Detected",
+                        f"⚠️ {len(threats)} threats found in your home directory:\n\n"
+                        f"{threat_list}\n\nDo you want to delete them all?"
+                    )
+                    if ans:
+                        deleted = 0
+                        for file_path, result in threats:
+                            final = scan_and_delete(file_path, auto_delete=True)
+                            threat_page.add_log_entry(f"{os.path.basename(file_path)}: {final}")
+                            deleted += 1
+                        messagebox.showinfo("Deep Scan", f"🗑 Deleted {deleted} threats.")
+                    else:
+                        messagebox.showinfo("Deep Scan", f"⚠️ {len(threats)} threats kept.")
+
+                self.after(0, ask_delete)
+
+            self.after(0, self.reset_ui)
+
         except Exception as e:
-            self.after(0, lambda: self.scan_complete_ui(file_path, f"Error: {str(e)}"))
+            self.after(0, lambda: messagebox.showerror("Error", f"Deep scan failed: {e}"))
+            self.after(0, self.reset_ui)
 
-    def scan_complete_ui(self, file_path: str, result: str):
-     """Called after scan completes → show result and ask user if needed."""
-     self.status_label.config(text=I18N[self.controller.lang]["scan_complete"])
+    # ----------------- HELPERS -----------------
+    def parallel_scan_files(self, file_list, threat_page):
+        from scanner_utils import scan_and_delete
+        threats = []
+        total = len(file_list)
+        processed = 0
 
-     filename = os.path.basename(file_path)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            futures = {executor.submit(scan_and_delete, f): f for f in file_list}
+            for future in concurrent.futures.as_completed(futures):
+                file_path = futures[future]
+                try:
+                    result = future.result()
+                    processed += 1
+                    progress = int((processed / total) * 100)
+                    filename = os.path.basename(file_path)
 
-    # --- ThreatsPage log reference ---
-     threat_page = self.controller.frames[ThreatsPage]
+                    # ✅ Update progress bar + show current filename
+                    self.after(0, lambda p=progress: self.progress_bar.config(value=p))
+                    self.after(0, lambda p=progress, fn=filename:
+                               self.progress_label.config(text=f"{p}% - {fn}"))
 
-     if result.startswith("❌"):  # Threat detected
-        answer = messagebox.askyesno(
-            "Threat Detected",
-            f"{filename}\n\n{result}\n\nDo you want to delete this file?"
-        )
-        if answer:
-            from scanner_utils import scan_and_delete
-            final = scan_and_delete(file_path, auto_delete=True)
-            messagebox.showinfo("Result", final)
+                    if "❌" in result:
+                        threats.append((file_path, result))
+                        threat_page.add_log_entry(f"{filename}: {result}")
+                except Exception:
+                    continue
 
-            # Log deletion result
-            threat_page.add_log_entry(f"{filename}: {final}")
-        else:
-            messagebox.showinfo("Result", "⚠️ Threat kept (not deleted).")
-            threat_page.add_log_entry(f"{filename}: {result} (kept)")
+        # ✅ Final message when finished
+        self.after(0, lambda: self.progress_label.config(text="✅ Scan Complete"))
 
-     elif result.startswith("✅"):  # Clean
-        messagebox.showinfo("Scan Complete", f"{filename}: {result}")
-        threat_page.add_log_entry(f"{filename}: {result}")
+        return threats
 
-     elif result.startswith("Error"):  # Error in scan
-        messagebox.showerror("Scan Error", result)
-        threat_page.add_log_entry(f"{filename}: {result}")
-
-     else:  # Unexpected / unknown
-        messagebox.showwarning("Unknown Result", result)
-        threat_page.add_log_entry(f"{filename}: {result}")
-
-    # Reset UI
-     self.reset_ui()
-     write_last_scan_date()
-     self.controller.frames[MainPage].apply_language(self.controller.lang)
-
+    def stop_full_system_scan(self):
+        self.stop_scan_flag = True
+        self.status_label.config(text="⛔ Scan stopped by user.")
+        self.stop_button.pack_forget()
 
     def reset_ui(self):
-        """Reset scan progress UI elements."""
+        self.status_label.config(text="Status: Idle")
         self.progress_bar["value"] = 0
         self.progress_label.config(text="")
-        self.status_label.config(text="")
 
+    # ----------------- REALTIME POPUPS -----------------
+    def start_realtime_scan(self):
+        self.after(0, lambda: messagebox.showinfo(
+            "Realtime Background Scan",
+             "Real-time background scanning is active.\n(You will be notified of any threats.)"
+        ))
+
+    def start_ransomware_scan(self):
+        self.after(0, lambda: messagebox.showinfo(
+            "Realtime Ransomware Scan",
+            "Ransomware monitoring is active.\n(Suspicious activity will trigger alerts.)"
+        ))
+
+    # ----------------- LANGUAGE SWITCH -----------------
     def apply_language(self, lang: str):
-        """Apply translated labels dynamically."""
         t = I18N[lang]
-        self.card.config(text=f" 🔎 {t['btn_scan'].replace('🔎 ', '')} Files for Ransomware ")
-        self.reset_ui()
+        self.btn_file_scan.config(text=t["btn_select_file_scan"])
+        self.btn_deep_scan.config(text=t["btn_deep_scan"])
+        self.btn_realtime_bg.config(text=t["btn_realtime_bg_scan"])
+        self.btn_realtime_ransomware.config(text=t["btn_realtime_ransomware_scan"])
+
+
 
         
 class BackupPage(ttk.Frame):

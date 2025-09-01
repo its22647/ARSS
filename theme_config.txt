@@ -1,2 +1,2 @@
 theme=light
-language=English
+language=Urdu
