@@ -61,7 +61,7 @@ I18N = {
         # --- new scan buttons ---
         "btn_select_file_scan": "📂 Select File & Scan",
         "btn_deep_scan": "🛡 Deep Scan",
-        "btn_realtime_bg_scan": "⚙ Real Time Background Scan",
+        "btn_realtime_ep_scan": "⚙ Real Time Entry Points Scan",
         "btn_realtime_ransomware_scan": "🚨 Real Time Ransomware Scan",
         # ------------------------
         "subtitle_safety": "Stay Safe from Ransomware!",
@@ -115,7 +115,7 @@ I18N = {
         # --- new scan buttons ---
         "btn_select_file_scan": "📂 فائل منتخب کریں اور اسکین کریں",
         "btn_deep_scan": "🛡 تفصیلی اسکین",
-        "btn_realtime_bg_scan": "⚙ ریئل ٹائم بیک گراؤنڈ اسکین",
+        "btn_realtime_ep_scan": "⚙ ریئل ٹائم اینٹری پوائنٹس اسکین",
         "btn_realtime_ransomware_scan": "🚨 ریئل ٹائم رینسم ویئر اسکین",
         # ------------------------
         "subtitle_safety": "رینسم ویئر سے محفوظ رہیں!",
@@ -708,7 +708,10 @@ class MainPage(ttk.Frame):
         self.other_scan_label.config(text=t["virus_info_2"])
 
 
-import os, threading, concurrent.futures
+import os
+import threading
+import concurrent.futures
+from collections import deque
 from tkinter import filedialog, messagebox
 from tkinter import ttk
 
@@ -741,12 +744,12 @@ class ScanPage(ttk.Frame):
                    width=30)
         self.btn_deep_scan.pack(pady=10)
 
-        self.btn_realtime_bg = ttk.Button(self.card,
-                   text=I18N[self.controller.language]["btn_realtime_bg_scan"],
+        self.btn_realtime_ep = ttk.Button(self.card,
+                   text=I18N[self.controller.language]["btn_realtime_ep_scan"],
                    bootstyle="success-outline",
                    command=self.start_realtime_scan,
                    width=30)
-        self.btn_realtime_bg.pack(pady=10)
+        self.btn_realtime_ep.pack(pady=10)
 
         self.btn_realtime_ransomware = ttk.Button(self.card,
                    text=I18N[self.controller.language]["btn_realtime_ransomware_scan"],
@@ -788,10 +791,10 @@ class ScanPage(ttk.Frame):
     # ----------------- DEEP SCAN -----------------
     def start_full_system_scan(self):
         self.stop_scan_flag = False
-        self.status_label.config(text="🔍 Deep scanning your home directory...")
+        self.status_label.config(text="🔍 Deep scanning is in progress...")
         self.progress_bar["value"] = 0
         self.progress_label.config(text="0%")
-        self.stop_button.pack_forget()  # ❌ no stop button in deep scan
+        self.stop_button.pack_forget()  # no stop button shown for deep scan in current design
         threading.Thread(target=self.run_deep_scan, daemon=True).start()
 
     def run_deep_scan(self):
@@ -809,11 +812,10 @@ class ScanPage(ttk.Frame):
             # Parallel scan
             threats = self.parallel_scan_files(file_list, threat_page)
 
-            # After scan completes, popup
+            # After scan completes, popup (ensure runs on main thread)
             if not threats:
                 self.after(0, lambda: messagebox.showinfo("Deep Scan", "✅ No threats found."))
             else:
-                # Collect just filenames
                 threat_list = "\n".join([os.path.basename(fp) for fp, _ in threats])
 
                 def ask_delete():
@@ -842,52 +844,149 @@ class ScanPage(ttk.Frame):
 
     # ----------------- HELPERS -----------------
     def parallel_scan_files(self, file_list, threat_page):
+        """
+        Bounded submission parallel scan:
+        - submits up to `window_size` tasks, then waits for some to finish and submits more.
+        - safely updates UI (checks widget existence before changing).
+        - returns list of (filepath, result) for threats.
+        """
         from scanner_utils import scan_and_delete
+
         threats = []
         total = len(file_list)
+        if total == 0:
+            # nothing to scan
+            self._safe_ui_update(100, "No files")
+            return threats
+
+        # decide workers based on CPUs (threads are appropriate because scan_and_delete talks to clamd)
+        cpu = os.cpu_count() or 1
+        max_workers = min(64, max(2, cpu * 4))
+
+        # backlog window size (how many concurrent submitted tasks to keep)
+        window_size = max_workers * 2
+
+        # control UI update frequency
+        UPDATE_EVERY = 20
+
         processed = 0
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-            futures = {executor.submit(scan_and_delete, f): f for f in file_list}
-            for future in concurrent.futures.as_completed(futures):
-                file_path = futures[future]
+        # helper to safely update UI from background thread
+        def schedule_ui_update(pct, filename_short):
+            def do_update():
                 try:
-                    result = future.result()
-                    processed += 1
-                    progress = int((processed / total) * 100)
-                    filename = os.path.basename(file_path)
-
-                    # ✅ Update progress bar + show current filename
-                    self.after(0, lambda p=progress: self.progress_bar.config(value=p))
-                    self.after(0, lambda p=progress, fn=filename:
-                               self.progress_label.config(text=f"{p}% - {fn}"))
-
-                    if "❌" in result:
-                        threats.append((file_path, result))
-                        threat_page.add_log_entry(f"{filename}: {result}")
+                    if self.winfo_exists():
+                        self.progress_bar.configure(value=pct)
+                        self.progress_label.config(text=f"{pct}% - {filename_short}")
                 except Exception:
-                    continue
+                    # ignore UI errors (e.g. window closed)
+                    pass
+            # schedule on main thread
+            try:
+                self.after(0, do_update)
+            except Exception:
+                pass
 
-        # ✅ Final message when finished
-        self.after(0, lambda: self.progress_label.config(text="✅ Scan Complete"))
+        # Use a bounded submission pattern to avoid submitting huge numbers at once
+        it = iter(file_list)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {}  # future -> filepath
+
+            # submit initial batch
+            for _ in range(min(window_size, total)):
+                try:
+                    fp = next(it)
+                except StopIteration:
+                    break
+                futures[executor.submit(scan_and_delete, fp, False)] = fp
+
+            # process completed futures and keep the window filled
+            while futures:
+                # wait for at least one future to complete
+                done, _ = concurrent.futures.wait(futures.keys(), return_when=concurrent.futures.FIRST_COMPLETED)
+                for fut in done:
+                    fp = futures.pop(fut)
+                    # cooperative stop: break out if stop flag set
+                    if getattr(self, "stop_scan_flag", False):
+                        # try to cancel remaining futures (best-effort)
+                        for rem in list(futures.keys()):
+                            try:
+                                rem.cancel()
+                            except Exception:
+                                pass
+                        # also drain iterator by not submitting more
+                        futures.clear()
+                        break
+
+                    try:
+                        result = fut.result()
+                    except Exception:
+                        result = "Error: scan failed"
+
+                    processed += 1
+                    # avoid div-by-zero
+                    progress = int((processed / total) * 100) if total else 100
+                    filename_short = os.path.basename(fp) or fp
+
+                    # update UI occasionally (every UPDATE_EVERY files or on final)
+                    if (processed % UPDATE_EVERY == 0) or (processed == total):
+                        schedule_ui_update(progress, filename_short)
+
+                    # record threat if detected
+                    try:
+                        if isinstance(result, str) and "❌" in result:
+                            threats.append((fp, result))
+                            # best-effort log update
+                            try:
+                                threat_page.add_log_entry(f"{os.path.basename(fp)}: {result}")
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+
+                    # submit one more to keep backlog
+                    try:
+                        next_fp = next(it)
+                        futures[executor.submit(scan_and_delete, next_fp, False)] = next_fp
+                    except StopIteration:
+                        pass
+
+                # if stopped, exit loop
+                if getattr(self, "stop_scan_flag", False):
+                    break
+
+        # final UI mark (only if widget still exists)
+        try:
+            if self.winfo_exists():
+                self.after(0, lambda: self.progress_label.config(text="✅ Scan Complete"))
+        except Exception:
+            pass
 
         return threats
 
     def stop_full_system_scan(self):
+        # cooperative stop: the running tasks won't necessarily abort immediately,
+        # but we will stop submitting/processing results here.
         self.stop_scan_flag = True
         self.status_label.config(text="⛔ Scan stopped by user.")
         self.stop_button.pack_forget()
 
     def reset_ui(self):
         self.status_label.config(text="Status: Idle")
-        self.progress_bar["value"] = 0
-        self.progress_label.config(text="")
+        try:
+            self.progress_bar["value"] = 0
+        except Exception:
+            pass
+        try:
+            self.progress_label.config(text="")
+        except Exception:
+            pass
 
     # ----------------- REALTIME POPUPS -----------------
     def start_realtime_scan(self):
         self.after(0, lambda: messagebox.showinfo(
-            "Realtime Background Scan",
-             "Real-time background scanning is active.\n(You will be notified of any threats.)"
+            "Realtime Entry points Scan",
+             "Real-time Entry Points scanning is active.\n(You will be notified of any threats.)"
         ))
 
     def start_ransomware_scan(self):
@@ -901,10 +1000,8 @@ class ScanPage(ttk.Frame):
         t = I18N[lang]
         self.btn_file_scan.config(text=t["btn_select_file_scan"])
         self.btn_deep_scan.config(text=t["btn_deep_scan"])
-        self.btn_realtime_bg.config(text=t["btn_realtime_bg_scan"])
+        self.btn_realtime_ep.config(text=t["btn_realtime_ep_scan"])
         self.btn_realtime_ransomware.config(text=t["btn_realtime_ransomware_scan"])
-
-
 
         
 class BackupPage(ttk.Frame):
