@@ -1,11 +1,14 @@
 # 🛡️ Anti-Ransomware Security Solution
 
 <p align="center">
+  <img src="https://img.shields.io/github/downloads/its22647/ARSS/total.svg?style=for-the-badge&logo=github" alt="downloads" />
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/Status-Active-success" alt="status" />
   <img src="https://img.shields.io/badge/Platform-Windows-blue" alt="platform" />
   <img src="https://img.shields.io/badge/Language-Python%203.x-3776AB" alt="python" />
   <img src="https://img.shields.io/badge/GUI-ttkbootstrap%20%2F%20Tkinter-7952B3" alt="gui" />
-  <img src="https://img.shields.io/github/downloads/its22647/ARSS/total.svg" alt="downloads" />
 </p>
 
 <p align="center">
