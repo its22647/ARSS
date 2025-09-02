@@ -1,8 +1,8 @@
 # 🛡️ Anti-Ransomware Security Solution
 
 <p align="center">
-  <a href="https://github.com/its22647/ARSS/releases" target="_blank">
-    <img src="https://img.shields.io/github/downloads/its22647/ARSS/total.svg?style=for-the-badge&logo=github&logoColor=white" alt="downloads" width="400"/>
+  <a href="https://github.com/its22647/ARSS/releases/latest" target="_blank" rel="noopener">
+    <img src="https://img.shields.io/github/downloads/its22647/ARSS/total?style=for-the-badge&logo=github&logoColor=white" alt="downloads" width="600"/>
   </a>
 </p>
 
