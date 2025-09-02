@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <strong>Easy, Secure, and Safe!</strong>
+  <strong>Easy, Quick, and Safe!</strong>
 </p>
 
 ---
