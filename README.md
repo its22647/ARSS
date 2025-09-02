@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <strong>Real-time ransomware detection, prevention, and rapid recovery — in a lightweight desktop app.</strong>
+  <strong>Easy, Secure, and Safe!</strong>
 </p>
 
 ---
