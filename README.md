@@ -2,7 +2,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Status-Active-success" alt="status" />
-  <img src="https://img.shields.io/badge/Platform-Windows-blue" alt="platform" /
+  <img src="https://img.shields.io/badge/Platform-Windows-blue" alt="platform" />
   <img src="https://img.shields.io/badge/Language-Python%203.x-3776AB" alt="python" />
   <img src="https://img.shields.io/badge/GUI-ttkbootstrap%20%2F%20Tkinter-7952B3" alt="gui" />
 </p>
