@@ -26,9 +26,9 @@
 
 ## 🔎 Overview
 
-The **Anti-Ransomware Security Solution** is a desktop application that **detects, prevents, and mitigates** ransomware attacks in real time. It continuously monitors sensitive directories and system processes, blocks unauthorized encryption, and maintains safe, versioned backups for rapid recovery.
+The **Anti-Ransomware Security Solution** is a desktop application that **detects and prevents** ransomware attacks in real time. It monitors sensitive directories and system processes, blocks unauthorized encryption, and maintains safe, versioned backups for rapid recovery.
 
-This project targets students, researchers, and security-conscious users who want a clear, auditable, and extensible baseline for ransomware defense on Windows.
+This project targets students, researchers, and security-conscious users who want a clear, and extensible baseline for ransomware defense on Windows.
 
 ---
 
