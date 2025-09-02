@@ -1391,7 +1391,7 @@ class SettingsPage(ttk.Frame):
         """Apply language updates to this frame"""
         self.build_settings_ui()
 
-# ABOUT PAGE
+# ABOUT Page
 class AboutPage(ttk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
