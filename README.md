@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://github.com/its22647/ARSS/releases" target="_blank">
-    <img src="https://img.shields.io/github/downloads/its22647/ARSS/total.svg?style=for-the-badge&logo=github&logoColor=white&nocache=1" alt="downloads" width="400"/>
+    <img src="https://img.shields.io/github/downloads/its22647/ARSS/total.svg?style=for-the-badge&logo=github&logoColor=white" alt="downloads" width="400"/>
   </a>
 </p>
 
