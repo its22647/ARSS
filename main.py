@@ -168,7 +168,7 @@ I18N = {
 5. سیٹنگز: تھیم یا زبان تبدیل کریں اور تفصیلی مدد حاصل کریں۔
 6. ہمیشہ یقینی بنائیں کہ آپ کا سسٹم اپ ڈیٹ ہے اور فائلز کا باقاعدہ سے بیک اپ لیا جاتا ہے۔
 """,
-        "virus_info_title": "رینسم ویئر اسکیننگ",
+        "virus_info_title": "بیک گراؤنڈ اسکیننگ",
         "virus_info_1": "رینسم ویئر اسکیننگ ہو رہی ہے...",
         "virus_info_2": "یو ایس بی اسکیننگ / ڈاؤن لوڈ کردہ فائلز اسکیننگ...",
     },
@@ -1330,7 +1330,7 @@ class SettingsPage(ttk.Frame):
             write_theme_file(self.controller.theme_mode, self.controller.lang)
             
             # Apply language changes immediately
-            if lang_changed:
+             if lang_changed:
                 for frame in self.controller.frames.values():
                     if hasattr(frame, "apply_language"):
                         frame.apply_language(self.controller.lang)
@@ -1375,7 +1375,7 @@ class SettingsPage(ttk.Frame):
         
         # Rebuild UI to reflect current settings
         self.build_settings_ui()
-    
+        
     def reset_to_default(self):
         """Reset settings to default values"""
         self.select_theme("light")
