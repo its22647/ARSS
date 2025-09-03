@@ -7,6 +7,10 @@ import os, threading, concurrent.futures
 import subprocess, sys
 import psutil
 import json
+import os
+import threading
+import concurrent.futures
+from collections import deque
 import time
 import logging
 import math
@@ -27,6 +31,7 @@ from googleapiclient.http import MediaFileUpload
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 import backup
+from backup import authenticate_google_drive
 
 root = tk.Tk()
 root.withdraw()
@@ -42,11 +47,18 @@ HANDLE_EXE_PATH = os.path.join(os.getcwd(), "handle.exe")
 
 PROTECTED_PATHS = [os.path.expanduser("~/Documents")]
 
-logging.basicConfig(filename='anti_ransomware.log', level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+# --- App Root dir detect karo (exe ya py dono me chalega) ---
+if getattr(sys, 'frozen', False):
+    ROOT_DIR = os.path.dirname(sys.executable)   # exe ka actual folder
+else:
+    ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LOG_FILE = os.path.join(BASE_DIR, 'logs_history.json')
+# --- Logs folder create karo ---
+APPDATA_DIR = os.getenv("APPDATA")
+LOG_DIR = os.path.join(APPDATA_DIR, "AntiRansomware", "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+
+LOG_FILE_PATH = os.path.join(LOG_DIR, "anti_ransomware.log")
 THEME_FILE = "theme_config.txt"
 LAST_SCAN_FILE = "last_scan.txt"
 APP_VERSION = "1.0"
@@ -102,7 +114,7 @@ I18N = {
 5. Settings: Change theme or language and access detailed help.
 6. Always ensure your system is updated and files are regularly backed up.
 """,
-        "virus_info_title": "Ransomware Scanning",
+        "virus_info_title": "Background Scanning",
         "virus_info_1": "Ransomware Scanning...",
         "virus_info_2": "USB Scanning/Downloaded Files Scanning...",
     },
@@ -163,36 +175,7 @@ I18N = {
 }
 
 
-def authenticate_drive():
-    creds = None
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    credentials_path = os.path.join(script_dir, 'client_secret.json')
-    token_path = os.path.join(script_dir, 'token.pickle')
 
-    if not os.path.exists(credentials_path):
-        messagebox.showerror("Missing File", f"client_secret.json not found at:\n{credentials_path}")
-        return None
-
-    if os.path.exists(token_path):
-        with open(token_path, 'rb') as token:
-            creds = pickle.load(token)
-
-    try:
-        if creds and creds.valid:
-            pass
-        elif creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            raise Exception("Invalid or missing credentials")
-    except Exception as e:
-        if os.path.exists(token_path):
-            os.remove(token_path)
-        flow = InstalledAppFlow.from_client_secrets_file(credentials_path, SCOPES)
-        creds = flow.run_local_server(port=0)
-        with open(token_path, 'wb') as token:
-            pickle.dump(creds, token)
-
-    return build('drive', 'v3', credentials=creds)
 
 def create_drive_folder(service, folder_name, parent_id=None):
     metadata = {'name': folder_name, 'mimeType': 'application/vnd.google-apps.folder'}
@@ -208,16 +191,16 @@ def log_backup_event(event_type, file_path):
         "file": file_path
     }
     try:
-        if os.path.exists(LOG_FILE):
-            with open(LOG_FILE, "r", encoding="utf-8") as f:
+        if os.path.exists(LOG_FILE_PATH):
+            with open(LOG_FILE_PATH, "r", encoding="utf-8") as f:
                 logs = json.load(f)
         else:
             logs = []
         logs.append(log_entry)
-        with open(LOG_FILE, "w", encoding="utf-8") as f:
+        with open(LOG_FILE_PATH, "w", encoding="utf-8") as f:
             json.dump(logs, f, indent=2)
     except Exception as e:
-        print(f"[LOG-ERROR] Could not update {LOG_FILE}: {e}")
+        print(f"[LOG-ERROR] Could not update {LOG_FILE_PATH}: {e}")
     try:
         with open("backup.log", "a", encoding="utf-8") as f:
             f.write(f"[{log_entry['time']}] {event_type}: {file_path}\n")
@@ -330,11 +313,11 @@ def encryption_alert(filepath, entropy):
             messagebox.showerror("Error", f"Could not delete:\n{str(e)}")
 
 def view_logs():
-    if not os.path.exists(LOG_FILE):
+    if not os.path.exists(LOG_FILE_PATH):
         messagebox.showinfo("No Logs", "No logs found.")
         return
     try:
-        with open(LOG_FILE, "r", encoding="utf-8") as file:
+        with open(LOG_FILE_PATH, "r", encoding="utf-8") as file:
             logs = json.load(file)
     except json.JSONDecodeError:
         messagebox.showerror("Error", "Failed to read or parse the log file.")
@@ -708,12 +691,7 @@ class MainPage(ttk.Frame):
         self.other_scan_label.config(text=t["virus_info_2"])
 
 
-import os
-import threading
-import concurrent.futures
-from collections import deque
-from tkinter import filedialog, messagebox
-from tkinter import ttk
+
 
 class ScanPage(ttk.Frame):
     def __init__(self, parent, controller):
@@ -775,18 +753,33 @@ class ScanPage(ttk.Frame):
 
     # ----------------- FILE SCAN -----------------
     def select_file_and_scan(self):
-        file_path = filedialog.askopenfilename()
-        if file_path:
-            from scanner_utils import scan_and_delete
-            threat_page = self.controller.frames[ThreatsPage]
+     file_path = filedialog.askopenfilename()
+     if file_path:
+        from scanner_utils import scan_and_delete
+        threat_page = self.controller.frames[ThreatsPage]
 
-            result = scan_and_delete(file_path)
-            threat_page.add_log_entry(f"{os.path.basename(file_path)}: {result}")
+        result = scan_and_delete(file_path)
+        filename = os.path.basename(file_path)
+        threat_page.add_log_entry(f"{filename}: {result}")
 
-            if "❌" in result:
-                messagebox.showerror("Threat Detected", result)
+        if "❌" in result:
+            # Ask user whether to delete the file
+            ans = messagebox.askyesno("Threat Detected",
+                                      f"⚠️ Threat detected in {filename}\n\n"
+                                      f"{result}\n\nDo you want to delete this file?")
+            if ans:
+                # Delete file safely
+                try:
+                    os.remove(file_path)
+                    messagebox.showinfo("Deleted", f"🗑 {filename} has been deleted.")
+                    threat_page.add_log_entry(f"{filename}: Deleted by user")
+                except Exception as e:
+                    messagebox.showerror("Error", f"Could not delete {filename}: {e}")
             else:
-                messagebox.showinfo("Scan Result", result)
+                messagebox.showinfo("Kept", f"{filename} was kept by user choice.")
+        else:
+            messagebox.showinfo("Scan Result", result)
+
 
     # ----------------- DEEP SCAN -----------------
     def start_full_system_scan(self):
@@ -1063,7 +1056,7 @@ class BackupPage(ttk.Frame):
                 self.after(0, lambda: messagebox.showerror("Internet Error", I18N[self.controller.lang]["no_internet"]))
                 return
             self.after(0, lambda: self.update_progress_ui(0))
-            service = authenticate_drive()
+            service = authenticate_google_drive()
             if not service:
                 return
             folder_id = create_drive_folder(service, "RansomwareBackup")
@@ -1084,7 +1077,7 @@ class BackupPage(ttk.Frame):
                 self.after(0, lambda: messagebox.showerror("Internet Error", I18N[self.controller.lang]["no_internet"]))
                 return
             self.after(0, lambda: self.update_progress_ui(0))
-            service = authenticate_drive()
+            service = authenticate_google_drive()
             if not service:
                 return
             backup_root_id = create_drive_folder(service, "RansomwareBackup")
@@ -1104,11 +1097,13 @@ class BackupPage(ttk.Frame):
     def start_realtime_backup_thread(self, folder):
      def backup_and_monitor():
         try:
-            # Step 1: Full backup
+            # Step 1: Full backup start notice (optional)
             self.after(0, lambda: messagebox.showinfo(
-                "Realtime Backup", f"Starting full backup for:\n{folder}"
+                "Realtime Backup", f"📂 Starting full backup for:\n{folder}"
             ))
-            self.perform_upload_folder(folder)  # full backup
+
+            # Perform full backup (this uploads all files internally)
+            self.perform_upload_folder(folder)
 
             # Step 2: Start monitoring folder for new/modified files
             if backup and hasattr(backup, 'start_realtime_backup'):
@@ -1391,7 +1386,6 @@ class SettingsPage(ttk.Frame):
         """Apply language updates to this frame"""
         self.build_settings_ui()
 
-# ABOUT Page
 class AboutPage(ttk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
