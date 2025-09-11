@@ -1330,7 +1330,7 @@ class SettingsPage(ttk.Frame):
             write_theme_file(self.controller.theme_mode, self.controller.lang)
             
             # Apply language changes immediately
-             if lang_changed:
+        if lang_changed:
                 for frame in self.controller.frames.values():
                     if hasattr(frame, "apply_language"):
                         frame.apply_language(self.controller.lang)
