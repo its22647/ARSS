@@ -65,13 +65,13 @@ APP_VERSION = "1.0"
 
 I18N = {
     "English": {
-        "title_main": "Anti-Ransomware Security Solution for MS Windows",
+        "title_main": "🛡️Anti-Ransomware Security Solution for MS Windows",
         "btn_scan": "🔎 Scan Now",
         "btn_backup": "💾 Backup Data",
         "btn_threats": "⚠ Threat Logs",
         "btn_settings": "🌎 Switch Language",
         # --- new scan buttons ---
-        "btn_select_file_scan": "📂 Select File & Scan",
+        "btn_select_file_scan": "📂 Manual Scan",
         "btn_deep_scan": "🛡 Deep Scan",
         "btn_realtime_ep_scan": "⚙ Real Time Entry Points Scan",
         "btn_realtime_ransomware_scan": "🚨 Real Time Ransomware Scan",
@@ -91,7 +91,7 @@ I18N = {
         "help_btn": "❓ Help",
         "updates_btn": "🔄 Check for Updates",
         "about_btn": "👤 About",
-        "up_to_date": "App is up to date",
+        "up_to_date": "Virus definitions are up-to-date.\n For further updation internet connection is required.",
         "reset_btn": "Reset to Default",
         "reset_info": "Settings have been reset to default values.",
         "about_title": "👤 About This Application",
@@ -119,13 +119,13 @@ I18N = {
         "virus_info_2": "USB Scanning/Downloaded Files Scanning...",
     },
     "Urdu": {
-        "title_main": "اینٹی رینسم ویئر سیکیورٹی سلوشن برائے ونڈوز",
+        "title_main": "اینٹی رینسم ویئر سیکیورٹی سلوشن برائے ونڈوز🛡️",
         "btn_scan": "🔎 اسکین کریں",
         "btn_backup": "💾 بیک اپ",
         "btn_threats": "⚠ تھریٹ لاگ",
         "btn_settings": "🌎 زبان تبدیل کریں",
         # --- new scan buttons ---
-        "btn_select_file_scan": "📂 فائل منتخب کریں اور اسکین کریں",
+        "btn_select_file_scan": "📂 خود اسکین",
         "btn_deep_scan": "🛡 تفصیلی اسکین",
         "btn_realtime_ep_scan": "⚙ ریئل ٹائم اینٹری پوائنٹس اسکین",
         "btn_realtime_ransomware_scan": "🚨 ریئل ٹائم رینسم ویئر اسکین",
@@ -656,7 +656,7 @@ class MainPage(ttk.Frame):
 
     def check_updates(self):
         t = I18N[self.controller.lang]
-        messagebox.showinfo("Updates", f"{t['up_to_date']} (v{APP_VERSION}).")
+        messagebox.showinfo("Updates", f"{t['up_to_date']}")
 
     def show_help_dialog(self):
         import os, webbrowser
@@ -686,7 +686,7 @@ class MainPage(ttk.Frame):
         self.btn_updates.config(text=t["updates_btn"])
         self.btn_about.config(text=t["about_btn"])
         self.btn_help.config(text=t["help_btn"])
-        self.virus_card.config(text=t["virus_info_title"])
+        self.virus_card.config(text=I18N["English"]["virus_info_title"])
         self.ransomware_scan_label.config(text=t["virus_info_1"])
         self.other_scan_label.config(text=t["virus_info_2"])
 
@@ -711,7 +711,7 @@ class ScanPage(ttk.Frame):
         self.btn_file_scan = ttk.Button(self.card,
                    text=I18N[self.controller.language]["btn_select_file_scan"],
                    bootstyle="info-outline",
-                   command=self.select_file_and_scan,
+                   command=self.select_file_or_folder_and_scan,
                    width=30)
         self.btn_file_scan.pack(pady=10)
 
@@ -752,33 +752,80 @@ class ScanPage(ttk.Frame):
         self.stop_button.pack_forget()
 
     # ----------------- FILE SCAN -----------------
-    def select_file_and_scan(self):
-     file_path = filedialog.askopenfilename()
+    def select_file_or_folder_and_scan(self):
+    # Ask user whether they want to pick file or folder
+     choice = messagebox.askyesno("Select Type", "Do you want to scan a FOLDER?\n\nYes = Folder, No = File")
+
+     if choice:  # Folder select
+        file_path = filedialog.askdirectory()
+     else:  # File select
+        file_path = filedialog.askopenfilename()
+
      if file_path:
         from scanner_utils import scan_and_delete
         threat_page = self.controller.frames[ThreatsPage]
 
         result = scan_and_delete(file_path)
-        filename = os.path.basename(file_path)
-        threat_page.add_log_entry(f"{filename}: {result}")
 
-        if "❌" in result:
-            # Ask user whether to delete the file
-            ans = messagebox.askyesno("Threat Detected",
-                                      f"⚠️ Threat detected in {filename}\n\n"
-                                      f"{result}\n\nDo you want to delete this file?")
-            if ans:
-                # Delete file safely
-                try:
-                    os.remove(file_path)
-                    messagebox.showinfo("Deleted", f"🗑 {filename} has been deleted.")
-                    threat_page.add_log_entry(f"{filename}: Deleted by user")
-                except Exception as e:
-                    messagebox.showerror("Error", f"Could not delete {filename}: {e}")
-            else:
-                messagebox.showinfo("Kept", f"{filename} was kept by user choice.")
+        # Agar folder hai to dictionary milegi results ke sath
+        if isinstance(result, dict):
+            infected_files = []
+            clean = 0
+
+            for filepath, res in result.items():
+                filename = os.path.basename(filepath)
+                threat_page.add_log_entry(f"{filename}: {res}")
+
+                if "❌" in res:
+                    infected_files.append(filepath)
+                elif "✅" in res:
+                    clean += 1
+
+            summary = f"Folder Scan Completed\n\n✅ Clean: {clean}\n❌ Infected: {len(infected_files)}"
+            messagebox.showinfo("Folder Scan Result", summary)
+
+            # Agar threats mile to ask user whether to delete all
+            if infected_files:
+                ans = messagebox.askyesno("Threats Detected",
+                                          f"⚠️ {len(infected_files)} threats found in this folder.\n\n"
+                                          "Do you want to delete all infected files?")
+                if ans:
+                    deleted = 0
+                    failed = 0
+                    for filepath in infected_files:
+                        try:
+                            os.remove(filepath)
+                            deleted += 1
+                            threat_page.add_log_entry(f"{os.path.basename(filepath)}: Deleted by user")
+                        except Exception as e:
+                            failed += 1
+                            threat_page.add_log_entry(f"{os.path.basename(filepath)}: Delete failed - {e}")
+
+                    messagebox.showinfo("Deletion Summary",
+                                        f"🗑 Deleted: {deleted}")
+
         else:
-            messagebox.showinfo("Scan Result", result)
+            # Single file result
+            filename = os.path.basename(file_path)
+            threat_page.add_log_entry(f"{filename}: {result}")
+
+            if "❌" in result:
+                # Ask user whether to delete the file
+                ans = messagebox.askyesno("Threat Detected",
+                                          f"⚠️ Threat detected in {filename}\n\n"
+                                          f"{result}\n\nDo you want to delete this file?")
+                if ans:
+                    try:
+                        os.remove(file_path)
+                        messagebox.showinfo("Deleted", f"🗑 {filename} has been deleted.")
+                        threat_page.add_log_entry(f"{filename}: Deleted by user")
+                    except Exception as e:
+                        messagebox.showerror("Error", f"Could not delete {filename}: {e}")
+                else:
+                    messagebox.showinfo("Kept", f"{filename} was kept by user choice.")
+            else:
+                messagebox.showinfo("Scan Result", result)
+
 
 
     # ----------------- DEEP SCAN -----------------
@@ -1064,7 +1111,8 @@ class BackupPage(ttk.Frame):
             self.after(0, lambda: self.update_progress_ui(100))
             self.after(0, lambda: messagebox.showinfo("Success", "File uploaded successfully!"))
         except Exception as e:
-            self.after(0, lambda: messagebox.showerror("Upload Error", msg=str(e)))
+            self.after(0, lambda: messagebox.showerror("Upload Error", str(e)))
+
 
     def select_folder_for_backup(self):
         folder = filedialog.askdirectory(parent=self.master)
@@ -1086,7 +1134,8 @@ class BackupPage(ttk.Frame):
             self.after(0, lambda: self.update_progress_ui(100))
             self.after(0, lambda: messagebox.showinfo("Success", "Folder uploaded successfully!"))
         except Exception as e:
-            self.after(0, lambda: messagebox.showerror("Upload Error", msg=str(e)))
+            self.after(0, lambda: messagebox.showerror("Upload Error", str(e)))
+
 
     # -------------------- Realtime Backup -------------------- #
     def select_folder_for_realtime_backup(self):
@@ -1113,9 +1162,10 @@ class BackupPage(ttk.Frame):
                     f"Realtime backup started for folder:\n{folder}\nAll new or modified files will be uploaded automatically."
                 ))
         except Exception as e:
-            self.after(0, lambda: messagebox.showerror(
-                "Error", f"Realtime backup failed: {e}"
-            ))
+         self.after(0, lambda err=e: messagebox.showerror(
+         "Error", f"Realtime backup failed: {err}"
+    ))
+
 
     # Run full backup + monitoring in a separate thread
      threading.Thread(target=backup_and_monitor, daemon=True).start()
@@ -1330,20 +1380,20 @@ class SettingsPage(ttk.Frame):
             write_theme_file(self.controller.theme_mode, self.controller.lang)
             
             # Apply language changes immediately
-             if lang_changed:
+        if lang_changed:
                 for frame in self.controller.frames.values():
                     if hasattr(frame, "apply_language"):
                         frame.apply_language(self.controller.lang)
             
             # Show success message
-            t = I18N[self.controller.lang]
-            messagebox.showinfo(
+        t = I18N[self.controller.lang]
+        messagebox.showinfo(
                 t["settings_saved_title"],
                 t["settings_saved_message"]
             )
             
             # If theme changed, restart is recommended
-            if theme_changed:
+        if theme_changed:
                 if messagebox.askyesno(
                     "Restart Recommended", 
                     "Theme changes will work best after restarting the application.\n\nWould you like to restart now?"
@@ -1369,12 +1419,12 @@ class SettingsPage(ttk.Frame):
                         print(f"Error restarting: {e}")
                     return
         else:
-            print("DEBUG: No changes detected to save")
+             print("DEBUG: No changes detected to save")
             # No changes
-            messagebox.showinfo("No Changes", "No settings were changed.")
+            # messagebox.showinfo("No Changes", "No settings were changed.")
         
         # Rebuild UI to reflect current settings
-        self.build_settings_ui()
+             self.build_settings_ui()
         
     def reset_to_default(self):
         """Reset settings to default values"""
