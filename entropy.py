@@ -36,7 +36,7 @@ ENTROPY_THRESHOLD = 7.5
 ALWAYS_SAFE_EXTENSIONS = [
     '.pdf', '.doc', '.docx', '.xls', '.xlsx',
     '.ppt', '.pptx', '.jpg', '.jpeg', '.png',
-    '.gif', '.mp3', '.mp4', '.avi', '.mkv', '.zip', '.rar'
+    '.gif', '.mp3', '.mp4', '.avi', '.mkv', '.zip', '.rar', '.exe'
 ]
 
 SAFE_EXTENSIONS = [
