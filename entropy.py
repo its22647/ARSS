@@ -36,13 +36,21 @@ ENTROPY_THRESHOLD = 7.5
 ALWAYS_SAFE_EXTENSIONS = [
     '.pdf', '.doc', '.docx', '.xls', '.xlsx',
     '.ppt', '.pptx', '.jpg', '.jpeg', '.png',
-    '.gif', '.mp3', '.mp4', '.avi', '.mkv', '.zip', '.rar', '.exe'
+    '.gif', '.mp3', '.mp4', '.avi', '.mkv', '.zip','.temp', '.rar', '.exe'
 ]
 
 SAFE_EXTENSIONS = [
     '.enc', '.dat', '.bin', '.pak', '.idx', '.db', '.sqlite',
     '.cab', '.res', '.dll', '.sys', '.ini', '.cfg', '.conf',
     '.json', '.log', '.key', '.exe', '.dill', '.png'
+]
+# ✅ Extensions that are always suspicious if detected
+ALWAYS_SUSPICIOUS_EXTENSIONS = [
+    '.crypt', '.crypted', '.crypto', '.crypz', '.cryp1',
+    '.locked', '.locky', '.payme', '.ransom',
+    '.encrypted', '.enc1', '.enc2', '.enc3',
+    '.wnry', '.wannacry', '.teslacrypt', '.cerber',
+    '.djvu', '.tro', '.rumba', '.radman', '.stop'
 ]
 
 USER_FOLDERS = [
@@ -157,6 +165,13 @@ class EntropyMonitorHandler(FileSystemEventHandler):
      try:
         ext = os.path.splitext(file_path)[1].lower()
 
+        # ✅ 0) If extension is always suspicious → immediately alert
+        if ext in ALWAYS_SUSPICIOUS_EXTENSIONS:
+            logger.warning(f"[🚨] Suspicious extension detected: {file_path}")
+            proc = find_process_by_file(file_path)
+            popup_queue.put((file_path, proc, ENTROPY_THRESHOLD + 1))  # force trigger
+            return  
+
         # ✅ 1) Ignore always-safe extensions completely
         if ext in ALWAYS_SAFE_EXTENSIONS:
             return  
@@ -182,6 +197,7 @@ class EntropyMonitorHandler(FileSystemEventHandler):
 
      except Exception as e:
         logger.error(f"[❌] check_file failed: {e}")
+
 
 
 
